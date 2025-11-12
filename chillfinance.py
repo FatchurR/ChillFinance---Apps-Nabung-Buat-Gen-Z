@@ -1,6 +1,8 @@
 import csv
 import os
 import sys
+import termios
+import tty
 import time
 from datetime import datetime, timedelta
 from getpass import getpass
@@ -11,6 +13,28 @@ from getpass import getpass
 
 def clear():
     os.system('cls' if os.name == 'nt' else 'clear')
+
+# ANSI color helpers
+def color(text, code):
+    return f"\033[{code}m{text}\033[0m"
+
+def bold(text):
+    return f"\033[1m{text}\033[0m"
+
+def cyan(text):
+    return color(text, '36')
+
+def green(text):
+    return color(text, '32')
+
+def yellow(text):
+    return color(text, '33')
+
+def red(text):
+    return color(text, '31')
+
+def magenta(text):
+    return color(text, '35')
 
 def slow_print(text):
     for c in text:
@@ -31,21 +55,60 @@ def valid_password(pw):
         return False, "Password minimal 6 karakter."
     return True, ""
 
+import sys
+import termios
+import tty
+
+def format_rupiah_input(angka_str):
+    """Format angka menjadi tampilan Rp style Indonesia (10.000,00)"""
+    if not angka_str:
+        return ""
+    angka_int = int(angka_str)
+    return f"{angka_int:,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
+
 def input_nominal(prompt):
-    while True:
-        val = input(prompt).strip()
-        cleaned = val.replace(".", "").replace(",", "").replace(" ", "")
-        if cleaned == "":
-            print("❌ Input kosong. Masukkan nominal.")
-            continue
-        if not cleaned.isdigit():
-            print("❌ Hanya boleh angka, gunakan titik/koma untuk pemisah ribuan.")
-            continue
-        nominal = int(cleaned)
-        if nominal <= 0:
-            print("❌ Nominal harus lebih dari 0.")
-            continue
-        return nominal
+    """Input nominal realtime dengan format otomatis 10.000,00"""
+    print(prompt, end="", flush=True)
+    angka_str = ""
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    try:
+        tty.setraw(fd)
+        while True:
+            ch = sys.stdin.read(1)
+            if ch == "\r" or ch == "\n":  # Enter
+                print()
+                if not angka_str:
+                    print("❌ Input kosong. Masukkan nominal.")
+                    return input_nominal(prompt)
+                nominal = int(angka_str)
+                if nominal <= 0:
+                    print("❌ Nominal harus lebih dari 0.")
+                    return input_nominal(prompt)
+                return nominal
+            elif ch == "\x7f":  # Backspace
+                if len(angka_str) > 0:
+                    angka_str = angka_str[:-1]
+                    sys.stdout.write("\r" + " " * 50 + "\r")  # Hapus baris
+                    sys.stdout.write(prompt + format_rupiah_input(angka_str))
+                    sys.stdout.flush()
+            elif ch.isdigit():
+                calon = angka_str + ch
+                # Batasi maksimal 1 triliun (1.000.000.000.000)
+                if int(calon) > 1_000_000_000_000:
+                    sys.stdout.write("\r" + " " * 70 + "\r")
+                    sys.stdout.write(prompt + format_rupiah_input(angka_str))
+                    sys.stdout.flush()
+                    continue  # Abaikan input tambahan
+                angka_str = calon
+                sys.stdout.write("\r" + " " * 70 + "\r")
+                sys.stdout.write(prompt + format_rupiah_input(angka_str))
+                sys.stdout.flush()
+            else:
+                # Abaikan karakter non-digit
+                pass
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
 def input_catatan():
     while True:
@@ -73,7 +136,7 @@ users = {}
 
 def register():
     clear()
-    print("=== REGISTER AKUN ===")
+    print(bold(cyan("📝 REGISTER AKUN")))
     while True:
         username = input("Masukkan Username: ").strip()
         valid, msg = valid_username(username)
@@ -113,7 +176,7 @@ def register():
 
 def login():
     clear()
-    print("=== LOGIN ===")
+    print(bold(cyan("🔑 LOGIN")))
     uname = input("Username: ").strip().lower()
     pw = getpass("Password: ")
 
@@ -131,12 +194,12 @@ def login():
 
 def set_target(user):
     while True:
-        print("\n=== KELOLA TARGET TABUNGAN ===")
-        print("1. Tambah Target Baru")
-        print("2. Lihat Daftar Target")
-        print("3. Hapus Target")
-        print("4. Kembali")
-        pilih = input("Pilih: ").strip()
+        print("\n" + bold(magenta("🎯 KELOLA TARGET TABUNGAN")))
+        print(f"{green('➕')} 1. Tambah Target Baru")
+        print(f"{cyan('📋')} 2. Lihat Daftar Target")
+        print(f"{red('🗑️')} 3. Hapus Target")
+        print(f"{yellow('↩️')} 4. Kembali")
+        pilih = input(bold("Pilih: ")).strip()
         if pilih == "1":
             nama = input("Nama Target (unik): ").strip()
             if not nama:
@@ -154,10 +217,10 @@ def set_target(user):
                 "riwayat": [],
                 "last_withdraw": None  # <== Tambahan
             }
-            print(f"✅ Target '{nama}' dibuat (Rp {target_amt:,}).")
+            print(green(f"✅ Target '{nama}' dibuat (Rp {target_amt:,})."))
 
         elif pilih == "2":
-            print("\n--- Daftar Target ---")
+            print("\n" + bold(cyan("--- Daftar Target ---")))
             targets = users[user]["targets"]
             if not targets:
                 print("(Belum ada target)")
@@ -175,14 +238,14 @@ def set_target(user):
                     filled = int(bar_len * pct / 100)
                     bar = "#" * filled + "-" * (bar_len - filled)
                     print(f"{idx}. {tname} → Rp {t_saldo:,} / Rp {t_target:,} ({pct}%) {status}")
-                    print(f"   Progress: [{bar}]")
+                    print(f"   Progress: [{green(bar)}]")
             input("Tekan Enter untuk kembali...")
         elif pilih == "3":
             targets = users[user]["targets"]
             if not targets:
                 print("Tidak ada target untuk dihapus.")
                 continue
-            print("Pilih target untuk dihapus:")
+            print(bold(red("Pilih target untuk dihapus:")))
             names = list(targets.keys())
             for i, n in enumerate(names, 1):
                 print(f"{i}. {n}")
@@ -196,7 +259,7 @@ def set_target(user):
             nama_hapus = names[idx]
             if konfirmasi_aksi(f"Yakin hapus target '{nama_hapus}'? (Y/n): "):
                 targets.pop(nama_hapus, None)
-                print(f"✅ Target '{nama_hapus}' dihapus.")
+                print(green(f"✅ Target '{nama_hapus}' dihapus."))
             else:
                 print("Batal hapus.")
         elif pilih == "4":
@@ -210,10 +273,10 @@ def set_target(user):
 
 def pilih_sumber_saldo(user, action):
     while True:
-        print("\nPilih sumber saldo:")
-        print("1. Saldo Utama")
-        print("2. Saldo Target")
-        pilihan = input("Pilih (1/2): ").strip()
+        print("\n" + bold(cyan("💰 Pilih sumber saldo:")))
+        print(f"{green('🏦')} 1. Saldo Utama")
+        print(f"{magenta('🎯')} 2. Saldo Target")
+        pilihan = input(bold("Pilih (1/2): ")).strip()
         if pilihan == "1":
             return "utama", None
         elif pilihan == "2":
@@ -240,7 +303,7 @@ def pilih_sumber_saldo(user, action):
             print("❌ Pilihan tidak valid.")
 
 def nabung(user):
-    print("\n=== NABUNG (UANG MASUK) ===")
+    print("\n" + bold(green("💸 NABUNG (UANG MASUK)")))
     sumber, target_name = pilih_sumber_saldo(user, "nabung")
     if sumber is None:
         return
@@ -249,7 +312,7 @@ def nabung(user):
     if sumber == "utama":
         users[user]["saldo_utama"] += jumlah
         users[user]["riwayat"].append([datetime.now().strftime("%Y-%m-%d %H:%M"), "nabung", jumlah, catatan])
-        print("✅ Transaksi nabung ke saldo utama berhasil.")
+        print(green("✅ Transaksi nabung ke saldo utama berhasil."))
         input("\nTekan Enter untuk kembali ke menu utama...")
         return
     else:
@@ -267,13 +330,13 @@ def nabung(user):
         if tdata["saldo"] >= tdata["target"]:
             tdata["saldo"] = tdata["target"]
             tdata["status"] = "selesai"
-            print(f"🎉 Target '{target_name}' telah tercapai!")
+            print(bold(yellow(f"🎉 Target '{target_name}' telah tercapai!")))
         else:
-            print(f"✅ Nabung ke target '{target_name}' berhasil. Saldo: Rp {tdata['saldo']:,}")
+            print(green(f"✅ Nabung ke target '{target_name}' berhasil. Saldo: Rp {tdata['saldo']:,}"))
         input("\nTekan Enter untuk kembali ke menu utama...")
 
 def pengeluaran(user):
-    print("\n=== CATAT PENGELUARAN ===")
+    print("\n" + bold(red("🧾 CATAT PENGELUARAN")))
     sumber, target_name = pilih_sumber_saldo(user, "keluar")
     if sumber is None:
         return
@@ -290,8 +353,8 @@ def pengeluaran(user):
     if sumber == "utama":
         if last_withdraw and (now - last_withdraw).days < 365:
             sisa = 365 - (now - last_withdraw).days
-            print(f"\n❌ Anda sudah melakukan penarikan tahun ini.")
-            print(f"⏳ Coba lagi dalam {sisa} hari ({(last_withdraw + timedelta(days=365)).strftime('%d %B %Y')}).")
+            print(red(f"\n❌ Anda sudah melakukan penarikan tahun ini."))
+            print(yellow(f"⏳ Coba lagi dalam {sisa} hari ({(last_withdraw + timedelta(days=365)).strftime('%d %B %Y')})."))
             input("\nTekan Enter untuk kembali ke menu utama...")
             return
 
@@ -300,12 +363,12 @@ def pengeluaran(user):
         if saldo_utama >= jumlah:
             users[user]["saldo_utama"] -= jumlah
             users[user]["riwayat"].append([datetime.now().strftime("%Y-%m-%d %H:%M"), "keluar", jumlah, catatan])
-            print("\n✅ Pengeluaran dari saldo utama dicatat.")
+            print(green("\n✅ Pengeluaran dari saldo utama dicatat."))
         else:
-            print("\n⚠️ Saldo utama tidak cukup.")
+            print(yellow("\n⚠️ Saldo utama tidak cukup."))
             users[user]["saldo_utama"] = int(saldo_utama * 0.3)
             users[user]["riwayat"].append([datetime.now().strftime("%Y-%m-%d %H:%M"), "keluar", jumlah, catatan])
-            print("Saldo utama disesuaikan menjadi 30% dari saldo sebelumnya.")
+            print(yellow("Saldo utama disesuaikan menjadi 30% dari saldo sebelumnya."))
 
         input("\nTekan Enter untuk kembali ke menu utama...")
         return
@@ -315,7 +378,7 @@ def pengeluaran(user):
     # =====================
     tdata = users[user]["targets"].get(target_name)
     if not tdata:
-        print("❌ Target tidak ditemukan.")
+        print(red("❌ Target tidak ditemukan."))
         input("\nTekan Enter untuk kembali ke menu utama...")
         return
 
@@ -327,19 +390,19 @@ def pengeluaran(user):
         if delta < 365:
             sisa_hari = 365 - delta
             next_tarik = last_wd + timedelta(days=365)
-            print(f"\n❌ Anda sudah melakukan penarikan tahun ini untuk target ini.")
-            print(f"⏳ Coba lagi dalam {sisa_hari} hari ({next_tarik.strftime('%d %B %Y')}).")
+            print(red(f"\n❌ Anda sudah melakukan penarikan tahun ini untuk target ini."))
+            print(yellow(f"⏳ Coba lagi dalam {sisa_hari} hari ({next_tarik.strftime('%d %B %Y')})."))
             input("\nTekan Enter untuk kembali ke menu utama...")
             return
 
     if tdata["saldo"] <= 0:
-        print("❌ Saldo target kosong.")
+        print(red("❌ Saldo target kosong."))
         input("\nTekan Enter untuk kembali ke menu utama...")
         return
 
     max_tarik = int(tdata["saldo"] * 0.3)
     if max_tarik <= 0:
-        print("❌ Saldo target tidak mencukupi untuk penarikan 30%.")
+        print(red("❌ Saldo target tidak mencukupi untuk penarikan 30%."))
         input("\nTekan Enter untuk kembali ke menu utama...")
         return
 
@@ -350,9 +413,9 @@ def pengeluaran(user):
 
     next_tarik = now + timedelta(days=365)
 
-    print(f"\n✅ Penarikan 30% (Rp {max_tarik:,}) dari saldo target '{target_name}' berhasil.")
-    print("⚠️ Anda hanya dapat melakukan penarikan 1x dalam setahun.")
-    print(f"📅 Penarikan berikutnya dapat dilakukan pada: {next_tarik.strftime('%d %B %Y')} ({(next_tarik - now).days} hari lagi).")
+    print(green(f"\n✅ Penarikan 30% (Rp {max_tarik:,}) dari saldo target '{target_name}' berhasil."))
+    print(yellow("⚠️ Anda hanya dapat melakukan penarikan 1x dalam setahun."))
+    print(cyan(f"📅 Penarikan berikutnya dapat dilakukan pada: {next_tarik.strftime('%d %B %Y')} ({(next_tarik - now).days} hari lagi)."))
 
     input("\nTekan Enter untuk kembali ke menu utama...")
 
@@ -361,12 +424,12 @@ def pengeluaran(user):
 # ========================
 
 def lihat_saldo(user):
-    print("\n=== SALDO & PROGRESS ===")
+    print("\n" + bold(green("💰 SALDO & PROGRESS")))
     saldo = users[user]["saldo_utama"]
     targets = users[user]["targets"]
-    print(f"Saldo Utama: Rp {saldo:,}")
+    print(f"{green('🏦')} Saldo Utama: Rp {saldo:,}")
     print("-" * 40)
-    print("Daftar Target:")
+    print(bold(magenta("🎯 Daftar Target:")))
     if not targets:
         print("(Belum ada target)")
     else:
@@ -383,15 +446,15 @@ def lihat_saldo(user):
             filled = int(bar_length * pct / 100)
             bar = "#" * filled + "-" * (bar_length - filled)
             print(f"{tname} → Rp {t_saldo:,} / Rp {t_target:,} ({pct}%) {status}")
-            print(f"Progress: [{bar}]")
+            print(f"Progress: [{green(bar)}]")
     input("Tekan Enter untuk kembali...")
 
 def lihat_riwayat(user):
-    print("\n=== RIWAYAT TRANSAKSI ===")
-    print("Pilih riwayat yang ingin dilihat:")
-    print("1. Saldo Utama")
-    print("2. Riwayat Target")
-    pil = input("Pilih (1/2): ").strip()
+    print("\n" + bold(cyan("📜 RIWAYAT TRANSAKSI")))
+    print(bold("Pilih riwayat yang ingin dilihat:"))
+    print(f"{green('🏦')} 1. Saldo Utama")
+    print(f"{magenta('🎯')} 2. Riwayat Target")
+    pil = input(bold("Pilih (1/2): ")).strip()
 
     if pil == "1":
         riwayat = users[user]["riwayat"]
@@ -446,7 +509,7 @@ def lihat_riwayat(user):
 
 
 def analisis_keuangan(user):
-    print("\n=== ANALISIS KEUANGAN ===")
+    print("\n" + bold(yellow("📊 ANALISIS KEUANGAN")))
     total_nabung = sum(j[2] for j in users[user]["riwayat"] if j[1] == "nabung")
     total_keluar = sum(j[2] for j in users[user]["riwayat"] if j[1] == "keluar")
 
@@ -461,11 +524,11 @@ def analisis_keuangan(user):
 
     rasio = (total_keluar / total_nabung) * 100
     if rasio < 30:
-        status = "Dompet Sehat 😎"
+        status = green("Dompet Sehat 😎")
     elif 30 <= rasio <= 60:
-        status = "Keuangan Cukup Stabil 🙂"
+        status = yellow("Keuangan Cukup Stabil 🙂")
     else:
-        status = "Boros Banget 😭"
+        status = red("Boros Banget 😭")
 
     print(f"Total Nabung: Rp {total_nabung:,}")
     print(f"Total Pengeluaran: Rp {total_keluar:,}")
@@ -484,25 +547,25 @@ def backup_data(user):
         for tname, tdata in users[user]["targets"].items():
             for row in tdata["riwayat"]:
                 writer.writerow([row[0], row[1], row[2], row[3], f"target:{tname}"])
-    print(f"✅ Data berhasil dibackup ke {filename}")
+    print(green(f"✅ Data berhasil dibackup ke {filename}"))
 
 def menu_utama(user):
     while True:
         clear()
-        print("="*50)
-        print("📱 Apps Bimbingan Konseling || by Smartone")
-        print("="*50)
-        print(f"Halo, {users[user]['username']}")
-        print("1. Lihat Saldo & Target")
-        print("2. Nabung")
-        print("3. Pengeluaran")
-        print("4. Kelola Target")
-        print("5. Lihat Riwayat")
-        print("6. Analisis Keuangan")
-        print("7. Backup Data")
-        print("8. Logout")
+        print(bold(cyan("="*50)))
+        print(bold(yellow("� ChillFinance - Nabung Gen Z")))
+        print(bold(cyan("="*50)))
+        print(f"👋 Halo, {bold(users[user]['username'])}")
+        print(f"{green('1️⃣')} Lihat Saldo & Target")
+        print(f"{green('2️⃣')} Nabung")
+        print(f"{red('3️⃣')} Pengeluaran")
+        print(f"{magenta('4️⃣')} Kelola Target")
+        print(f"{cyan('5️⃣')} Lihat Riwayat")
+        print(f"{yellow('6️⃣')} Analisis Keuangan")
+        print(f"{green('7️⃣')} Backup Data")
+        print(f"{red('8️⃣')} Logout")
 
-        pilih = input("Pilih menu: ").strip()
+        pilih = input(bold("Pilih menu: ")).strip()
 
         match pilih:
             case "1":
@@ -534,7 +597,7 @@ def menu_utama(user):
                     return
 
             case _:
-                print("❌ Pilihan tidak valid.")
+                print(red("❌ Pilihan tidak valid."))
 
 # ========================
 #  MAIN
@@ -543,11 +606,12 @@ def menu_utama(user):
 def main():
     while True:
         clear()
-        print("=== MENU UTAMA ===")
-        print("1. Login")
-        print("2. Register")
-        print("3. Keluar")
-        pilih = input("Pilih menu: ").strip()
+        print(bold(cyan("💸 ChillFinance - Nabung Gen Z")))
+        print(bold(""))
+        print(f"{green('1️⃣')} Login")
+        print(f"{yellow('2️⃣')} Register")
+        print(f"{red('3️⃣')} Keluar")
+        pilih = input(bold("Pilih menu: ")).strip()
         if pilih == "1":
             user = login()
             menu_utama(user)
@@ -559,7 +623,7 @@ def main():
                 print("Sampai jumpa!")
                 sys.exit()
         else:
-            print("❌ Pilihan tidak valid.")
+            print(red("❌ Pilihan tidak valid."))
 
 if __name__ == "__main__":
     main()
