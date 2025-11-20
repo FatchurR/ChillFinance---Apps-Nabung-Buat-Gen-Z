@@ -19,6 +19,50 @@ Fitur ini cocok untuk Gen Z yang sering kesulitan menyisihkan uang, agar bisa be
 
 ---
 
+## 🚀 Cara Menjalankan Aplikasi
+
+### Windows
+
+```bash
+python chillfinance.py
+```
+
+Atau jika Python belum ditambahkan ke PATH:
+
+```bash
+python3 chillfinance.py
+```
+
+### Linux
+
+```bash
+python3 chillfinance.py
+```
+
+Jika Anda ingin menjalankan dengan chmod:
+
+```bash
+chmod +x chillfinance.py
+./chillfinance.py
+```
+
+### macOS
+
+```bash
+python3 chillfinance.py
+```
+
+Atau gunakan Homebrew jika Python belum terinstall:
+
+```bash
+brew install python3
+python3 chillfinance.py
+```
+
+> **Catatan:** Pastikan Python 3.6+ sudah terinstall di sistem Anda. Cek dengan menjalankan `python --version` atau `python3 --version`.
+
+---
+
 ## ⚙️ Cara Kerja (Workflow)
 
 1. **Halaman Login Awal**
@@ -176,6 +220,14 @@ Menampilkan status keuangan:
   * `csv` → untuk backup data
   * `datetime` → untuk mencatat tanggal transaksi
   * `os` → untuk validasi file dan tampilan CLI
+
+---
+
+## 📚 Dokumentasi & Guide Book
+
+Untuk panduan lengkap dan dokumentasi lebih detail, kunjungi:
+
+* [🎓 User Guide](https://docs.google.com/document/d/1NQyktSJHHV8sd8_ybvAOpqO3vroNz86VSxmkAx_WX6g/edit?usp=sharing) 
 
 ---
 
