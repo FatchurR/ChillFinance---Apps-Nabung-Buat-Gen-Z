@@ -10,6 +10,15 @@ from getpass import getpass
 # =========================================================
 
 def supports_ansi():
+    """
+    Memeriksa apakah terminal mendukung ANSI color codes.
+    
+    Di Windows, perlu cek environment variable WT_SESSION atau ANSICON.
+    Di Linux/macOS, ANSI biasanya selalu didukung.
+    
+    Returns:
+        bool: True jika terminal mendukung ANSI, False jika tidak.
+    """
     if os.name == "nt":
         return "WT_SESSION" in os.environ or "ANSICON" in os.environ
     return True
@@ -17,6 +26,15 @@ def supports_ansi():
 USE_ANSI = supports_ansi()
 
 def smooth_print(text, delay=0.0015):
+    """
+    Mencetak teks dengan efek "smooth typing" (karakter per karakter dengan delay).
+    
+    Memberikan efek visual yang lebih menarik saat menampilkan pesan kepada user.
+    
+    Args:
+        text (str): Teks yang akan dicetak dengan efek smooth.
+        delay (float): Waktu delay antara setiap karakter dalam detik. Default 0.0015s.
+    """
     for c in text:
         sys.stdout.write(c)
         sys.stdout.flush()
@@ -24,11 +42,28 @@ def smooth_print(text, delay=0.0015):
     print()
 
 def smooth_replace(line):
+    """
+    Menghapus baris saat ini di terminal dan menggantinya dengan baris baru.
+    
+    Digunakan untuk efek "update" real-time tanpa membuat baris baru.
+    Cocok untuk menampilkan input angka yang dinamis.
+    
+    Args:
+        line (str): Baris teks yang akan ditampilkan menggantikan baris sebelumnya.
+    """
     sys.stdout.write("\r" + " " * 250 + "\r")
     sys.stdout.write(line)
     sys.stdout.flush()
 
 def smooth_clear():
+    """
+    Membersihkan layar terminal dengan efek smooth menggunakan ANSI codes.
+    
+    Menghapus layar terminal dan memindahkan cursor ke posisi awal (atas-kiri).
+    Dilakukan 2x dengan delay untuk efek visual yang smooth.
+    
+    Note: Hanya berfungsi jika terminal mendukung ANSI codes.
+    """
     if not USE_ANSI:
         return
     for _ in range(2):
@@ -38,6 +73,18 @@ def smooth_clear():
 
 _original_clear = None
 def patch_clear_function(original_clear_func):
+    """
+    Membungkus fungsi clear() original dengan efek smooth_clear().
+    
+    Mengintegrasikan smooth_clear() ke dalam fungsi clear() standar,
+    sehingga setiap kali clear() dipanggil, efek smooth akan diterapkan.
+    
+    Args:
+        original_clear_func: Fungsi clear() original yang akan dibungkus.
+        
+    Returns:
+        function: Fungsi clear() yang sudah dibungkus dengan smooth effect.
+    """
     global _original_clear
     _original_clear = original_clear_func
     def new_clear():
@@ -46,6 +93,16 @@ def patch_clear_function(original_clear_func):
     return new_clear
 
 def animate_digit(digit):
+    """
+    Menampilkan digit dengan efek bold/tebal dan slight delay untuk animasi.
+    
+    Digunakan untuk membuat input angka terlihat lebih visual dan responsif.
+    
+    Args:
+        digit (str): Karakter digit (0-9) yang akan ditampilkan dengan animasi.
+        
+    Note: Hanya berfungsi jika terminal mendukung ANSI codes.
+    """
     if not USE_ANSI:
         return
     sys.stdout.write(f"\033[1m{digit}\033[0m")
@@ -53,9 +110,33 @@ def animate_digit(digit):
     time.sleep(0.01)
 
 def render_input(prompt, angka_str, formatter):
+    """
+    Merender ulang input di terminal dengan format yang diinginkan.
+    
+    Menggabungkan prompt dengan string angka yang sudah diformat,
+    lalu menampilkannya kembali di tempat yang sama (tanpa baris baru).
+    
+    Args:
+        prompt (str): Teks prompt yang ditampilkan sebelum input.
+        angka_str (str): String yang berisi angka-angka yang diinput.
+        formatter (function): Fungsi untuk memformat angka_str (misal: format_rupiah_input).
+    """
     smooth_replace(prompt + formatter(angka_str))
 
 def patch_input_nominal(input_nominal_func, formatter):
+    """
+    Membungkus fungsi input_nominal() untuk menambahkan animasi digit.
+    
+    Mengintegrasikan efek animate_digit() ke dalam input_nominal(),
+    sehingga setiap digit yang diketik akan menampilkan animasi bold.
+    
+    Args:
+        input_nominal_func: Fungsi input_nominal() yang akan dibungkus.
+        formatter: Fungsi formatter untuk memformat output (tidak langsung digunakan di sini).
+        
+    Returns:
+        function: Wrapper function yang sudah mendukung animasi digit.
+    """
     def wrapper(prompt):
         original_write = sys.stdout.write
 
@@ -83,11 +164,33 @@ def _original_clear_func():
 clear = patch_clear_function(_original_clear_func)
 
 def color(text, code):
+    """
+    Memberi warna pada teks menggunakan ANSI color codes.
+    
+    Membungkus teks dengan kode ANSI untuk menampilkan warna tertentu.
+    Jika terminal tidak mendukung ANSI, teks akan ditampilkan tanpa warna.
+    
+    Args:
+        text (str): Teks yang akan diberi warna.
+        code (str): Kode warna ANSI (30-37 untuk foreground, 40-47 untuk background).
+        
+    Returns:
+        str: Teks dengan kode ANSI, atau teks original jika ANSI tidak didukung.
+    """
     if not USE_ANSI:
         return text
     return f"\033[{code}m{text}\033[0m"
 
 def bold(text):
+    """
+    Membuat teks menjadi bold/tebal menggunakan ANSI codes.
+    
+    Args:
+        text (str): Teks yang akan dibuat tebal.
+        
+    Returns:
+        str: Teks dengan format bold, atau teks original jika ANSI tidak didukung.
+    """
     if not USE_ANSI:
         return text
     return f"\033[1m{text}\033[0m"
@@ -99,6 +202,21 @@ def red(t): return color(t, '31')
 def magenta(t): return color(t, '35')
 
 def valid_username(username):
+    """
+    Memvalidasi format username yang diinput user.
+    
+    Username harus:
+    - Panjang antara 3-32 karakter
+    - Hanya terdiri dari huruf, angka, underscore (_), dash (-), atau spasi
+    
+    Args:
+        username (str): Username yang akan divalidasi.
+        
+    Returns:
+        tuple: (bool, str) - (is_valid, error_message)
+               Jika valid: (True, '')
+               Jika tidak valid: (False, pesan_error)
+    """
     import re
     if not (3 <= len(username) <= 32):
         return False, "Username harus 3–32 karakter."
@@ -107,6 +225,20 @@ def valid_username(username):
     return True, ""
 
 def valid_password(pw):
+    """
+    Memvalidasi format password yang diinput user.
+    
+    Password harus:
+    - Minimal 6 karakter
+    
+    Args:
+        pw (str): Password yang akan divalidasi.
+        
+    Returns:
+        tuple: (bool, str) - (is_valid, error_message)
+               Jika valid: (True, '')
+               Jika tidak valid: (False, pesan_error)
+    """
     if len(pw) < 6:
         return False, "Password minimal 6 karakter."
     return True, ""
@@ -116,6 +248,17 @@ def valid_password(pw):
 # =========================================================
 
 def format_rupiah(angka):
+    """
+    Memformat angka menjadi format Rupiah Indonesia dengan pemisah ribuan.
+    
+    Mengubah angka menjadi format: 1.234.567,89 (dengan titik sebagai pemisah ribuan dan koma desimal).
+    
+    Args:
+        angka: Angka yang akan diformat (int, float, atau str).
+        
+    Returns:
+        str: Angka yang sudah diformat sebagai Rupiah, atau "0,00" jika konversi gagal.
+    """
     try:
         angka = float(angka)
         return f"{angka:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
@@ -123,9 +266,31 @@ def format_rupiah(angka):
         return "0,00"
 
 def parse_nominal_input(teks):
+    """
+    Mengekstrak hanya karakter digit dari string input dan mengubahnya menjadi integer.
+    
+    Menghilangkan semua karakter non-digit (spasi, tanda baca, dll) kemudian konversi ke int.
+    
+    Args:
+        teks (str): String yang berisi digit dan karakter lainnya.
+        
+    Returns:
+        int: Angka yang sudah dikonversi dari digit-digit dalam teks.
+    """
     return int(''.join(ch for ch in teks if ch.isdigit()))
 
 def format_rupiah_input(angka_str):
+    """
+    Memformat string angka menjadi format Rupiah untuk ditampilkan di input.
+    
+    Fungsi helper yang menangani string kosong dengan aman.
+    
+    Args:
+        angka_str (str): String yang berisi angka-angka.
+        
+    Returns:
+        str: Angka yang sudah diformat sebagai Rupiah, atau string kosong jika gagal.
+    """
     if not angka_str:
         return ""
     try:
@@ -144,6 +309,22 @@ else:
     import tty
 
 def input_nominal(prompt):
+    """
+    Menerima input angka dari user dengan validasi dan formatting Rupiah real-time.
+    
+    Fitur:
+    - Menampilkan format Rupiah saat user mengetik
+    - Validasi input: hanya digit, minimal > 0, maksimal 1 Triliun
+    - Support backspace untuk menghapus digit
+    - Cross-platform: bekerja di Windows, Linux, dan macOS
+    - Animasi digit yang diketik
+    
+    Args:
+        prompt (str): Teks prompt yang ditampilkan sebelum input.
+        
+    Returns:
+        int: Angka yang sudah divalidasi dan diterima user.
+    """
     MAX_NOMINAL = 1_000_000_000_000
     print(prompt, end='', flush=True)
 
@@ -271,6 +452,19 @@ users = {}
 # =========================================================
 
 def register():
+    """
+    Menu registrasi akun pengguna baru.
+    
+    Proses:
+    1. Input username (validasi panjang 3-32 karakter dan format)
+    2. Input password (minimal 6 karakter)
+    3. Konfirmasi password
+    4. Simpan data user ke dictionary 'users'
+    5. Otomatis login setelah registrasi berhasil
+    
+    Returns:
+        str: Username yang baru didaftar (untuk login otomatis).
+    """
     clear()
     print(bold(cyan("📝 REGISTER AKUN")))
     while True:
@@ -315,6 +509,19 @@ def register():
 
 
 def login():
+    """
+    Menu login pengguna yang sudah terdaftar.
+    
+    Proses:
+    1. Input username (case-insensitive)
+    2. Input password
+    3. Validasi username dan password di dictionary 'users'
+    4. Jika berhasil, kembalikan username untuk akses menu utama
+    5. Jika gagal, ulangi login
+    
+    Returns:
+        str: Username yang berhasil login (lowercase).
+    """
     clear()
     print(bold(cyan("🔑 LOGIN")))
     uname = input("Username: ").strip().lower()
@@ -335,6 +542,18 @@ def login():
 # =========================================================
 
 def set_target(user):
+    """
+    Menu kelola target tabungan pengguna.
+    
+    Opsi:
+    1. Tambah Target Baru - Input nama target, nominal target, dan kategori
+    2. Lihat Daftar Target - Tampilkan semua target dengan progress bar
+    3. Hapus Target - Pilih target untuk dihapus
+    4. Kembali - Kembali ke menu utama
+    
+    Args:
+        user (str): Username pengguna yang login (lowercase).
+    """
     while True:
         clear()
         print(bold(magenta("🎯 KELOLA TARGET TABUNGAN")))
@@ -450,6 +669,21 @@ def set_target(user):
 # =========================================================
 
 def pilih_sumber_saldo(user, action):
+    """
+    Menu untuk memilih sumber saldo (Saldo Utama atau Saldo Target).
+    
+    Menampilkan daftar target yang aktif dan memungkinkan user memilih
+    sumber dana untuk operasi nabung atau pengeluaran.
+    
+    Args:
+        user (str): Username pengguna yang login (lowercase).
+        action (str): Jenis aksi ('nabung' atau 'keluar') - untuk referensi saja.
+        
+    Returns:
+        tuple: (sumber_type, target_name)
+               - sumber_type: 'utama' atau 'target'
+               - target_name: Nama target (None jika sumber_type='utama')
+    """
     while True:
         clear()
         print(bold(cyan("💰 PILIH SUMBER SALDO")))
@@ -494,6 +728,19 @@ def pilih_sumber_saldo(user, action):
 # =========================================================
 
 def nabung(user):
+    """
+    Menu untuk menambah tabungan (uang masuk).
+    
+    Proses:
+    1. Pilih sumber saldo (utama atau target)
+    2. Input jumlah uang yang ingin ditabung
+    3. Input catatan opsional
+    4. Catat transaksi dalam riwayat
+    5. Jika target tercapai, ubah status target menjadi 'selesai'
+    
+    Args:
+        user (str): Username pengguna yang login (lowercase).
+    """
     clear()
     print(bold(green("💸 NABUNG UANG")))
 
@@ -532,6 +779,19 @@ def nabung(user):
 # =========================================================
 
 def pengeluaran(user):
+    """
+    Menu untuk mencatat pengeluaran (uang keluar).
+    
+    Fitur:
+    - Dari Saldo Utama: Jika saldo tidak cukup, tarik semua saldo yang tersedia
+    - Dari Saldo Target: 
+      * Hanya bisa 1x per tahun
+      * Maksimal yang bisa ditarik adalah 30% dari saldo target
+      * Catat tanggal penarikan terakhir untuk validasi 1 tahun ke depan
+    
+    Args:
+        user (str): Username pengguna yang login (lowercase).
+    """
     clear()
     print(bold(red("🧾 CATAT PENGELUARAN")))
 
@@ -603,6 +863,21 @@ def pengeluaran(user):
 # =========================================================
 
 def lihat_saldo(user):
+    """
+    Menu untuk melihat saldo utama dan progress semua target tabungan.
+    
+    Menampilkan:
+    - Saldo Utama saat ini
+    - Daftar target dengan:
+      * Nominal saldo target
+      * Nominal target
+      * Persentase progress
+      * Progress bar visual
+      * Status (Aktif/Selesai)
+    
+    Args:
+        user (str): Username pengguna yang login (lowercase).
+    """
     clear()
     print(bold(green("💰 SALDO & PROGRESS")))
     saldo = users[user]["saldo_utama"]
@@ -639,6 +914,19 @@ def lihat_saldo(user):
 # =========================================================
 
 def lihat_riwayat(user):
+    """
+    Menu untuk melihat riwayat transaksi.
+    
+    Opsi:
+    1. Saldo Utama - Tampilkan semua transaksi nabung/keluar dari saldo utama
+    2. Riwayat Target - Pilih target, kemudian tampilkan transaksinya
+    3. Kembali - Kembali ke menu utama
+    
+    Menampilkan dalam format tabel: Tanggal | Tipe | Jumlah | Catatan
+    
+    Args:
+        user (str): Username pengguna yang login (lowercase).
+    """
     while True:
         clear()
         print(bold(cyan("📜 RIWAYAT TRANSAKSI")))
@@ -723,6 +1011,22 @@ def lihat_riwayat(user):
 # =========================================================
 
 def analisis_keuangan(user):
+    """
+    Menu untuk melihat analisis keuangan dan status dompet pengguna.
+    
+    Menghitung:
+    - Total Nabung (dari saldo utama + semua target)
+    - Total Pengeluaran (dari saldo utama + semua target)
+    - Rasio Pengeluaran (total_keluar / total_nabung * 100)
+    
+    Status Dompet berdasarkan rasio pengeluaran:
+    - < 30%: Dompet Sehat 😎
+    - 30-60%: Keuangan Cukup Stabil 🙂
+    - > 60%: Boros Banget 😭
+    
+    Args:
+        user (str): Username pengguna yang login (lowercase).
+    """
     clear()
     print(bold(yellow("📊 ANALISIS KEUANGAN")))
 
@@ -760,6 +1064,19 @@ def analisis_keuangan(user):
 # =========================================================
 
 def backup_data(user):
+    """
+    Mengekspor data pengguna ke file CSV untuk backup.
+    
+    File CSV berisi:
+    - Header: Tanggal, Tipe, Jumlah, Catatan, Sumber
+    - Baris data dari saldo utama (sumber='utama')
+    - Baris data dari setiap target (sumber='target:nama_target')
+    
+    Nama file: {username}_backup.csv (disimpan di direktori current)
+    
+    Args:
+        user (str): Username pengguna yang login (lowercase).
+    """
     clear()
     filename = f"{users[user]['username']}_backup.csv"
 
@@ -782,10 +1099,26 @@ def backup_data(user):
 # =========================================================
 
 def menu_utama(user):
+    """
+    Menu utama aplikasi setelah user berhasil login.
+    
+    Opsi menu:
+    1. Lihat Saldo & Target - Tampilkan saldo dan progress target
+    2. Nabung - Tambah saldo (uang masuk)
+    3. Pengeluaran - Kurangi saldo (uang keluar)
+    4. Kelola Target - Buat, lihat, atau hapus target
+    5. Lihat Riwayat - Lihat riwayat transaksi
+    6. Analisis Keuangan - Analisis status keuangan
+    7. Backup Data - Backup data ke file CSV
+    8. Logout - Keluar akun
+    
+    Args:
+        user (str): Username pengguna yang login (lowercase).
+    """
     while True:
         clear()
         print(bold(cyan("=" * 50)))
-        print(bold(yellow("💸 ChillFinance - Nabung Gen Z by FatchurR")))
+        print(bold(yellow("💸 ChillFinance - Nabung Gen Z by Smartone")))
         print(bold(cyan("=" * 50)))
         print(f"👋 Halo, {bold(users[user]['username'])}")
         print()
@@ -830,6 +1163,16 @@ def menu_utama(user):
 # =========================================================
 
 def main():
+    """
+    Fungsi utama/entry point aplikasi ChillFinance.
+    
+    Menu awal:
+    1. Login - Login dengan akun yang sudah terdaftar
+    2. Register - Daftar akun baru
+    3. Keluar - Keluar dari aplikasi
+    
+    Loop akan terus berjalan sampai user memilih keluar.
+    """
     while True:
         clear()
         print(bold(cyan("💸 ChillFinance - Nabung Gen Z")))
